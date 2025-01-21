@@ -1,4 +1,3 @@
-use regex;
 use std::{
     error::Error,
     fmt,
@@ -101,7 +100,7 @@ impl Cli {
     }
 
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        println!("🫵 You selected: ");
+        println!("\n🫵 You selected: ");
         println!("- Template: {GREEN}{0}{RESET}", self.template);
         println!("- To {GREEN}{0}{RESET}", self.new_or_init);
         println!("- Project name: {GREEN}{0}{RESET}", self.project_name);
