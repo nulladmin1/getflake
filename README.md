@@ -2,7 +2,13 @@
 
 Easily fetch my Nix Flake Templates using this `CLI` tool
 
-## Run
+To run without installing:
+
+```nix
+nix run github:nulladmin1/getflake
+```
+
+## Run (after cloning)
 
 ### Using `Nix` (recommended)
 
@@ -19,4 +25,3 @@ cargo run
 ## Usage
 
 Run the app, and follow the steps.
-
