@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     error::Error,
     fmt,
     fs::{self, File},
@@ -6,61 +7,12 @@ use std::{
     process::Command,
 };
 
-struct Template<'a> {
-    name: &'a str,
-    print_str: &'a str,
-}
+use serde_json;
 
-const TEMPLATES: [Template; 12] = [
-    Template {
-        name: "cpp-cmake",
-        print_str: "C/C++ with CMake",
-    },
-    Template {
-        name: "default",
-        print_str: "Default/Blank",
-    },
-    Template {
-        name: "flutter-nix",
-        print_str: "Flutter with Nixpkgs builders",
-    },
-    Template {
-        name: "go-gomod2nix",
-        print_str: "Go with Gomod2nix",
-    },
-    Template {
-        name: "go-nix",
-        print_str: "Go with Nixpkgs builders",
-    },
-    Template {
-        name: "python-nix",
-        print_str: "Python with Nixpkgs builders",
-    },
-    Template {
-        name: "python-poetry",
-        print_str: "Python with Poetry2nix",
-    },
-    Template {
-        name: "python-pyproject-nix",
-        print_str: "Python with Pyproject.nix",
-    },
-    Template {
-        name: "python-uv",
-        print_str: "Python with uv2nix",
-    },
-    Template {
-        name: "rust-fenix-naersk",
-        print_str: "Rust with Fenix and Naersk",
-    },
-    Template {
-        name: "rust-nix",
-        print_str: "Rust with Nixpkgs builders",
-    },
-    Template {
-        name: "vimPlugin",
-        print_str: "Vim/Neovim plugin with Nixpkgs builders",
-    },
-];
+struct Template {
+    name: String,
+    print_str: String,
+}
 
 const BLUE: &str = "\x1b[0;34m";
 const GREEN: &str = "\x1B[0;32m";
@@ -80,23 +32,84 @@ impl fmt::Display for NewOrInit {
     }
 }
 
+type Templates = Vec<Template>;
+
 pub struct Cli {
     pub template: String,
     pub new_or_init: NewOrInit,
     pub project_name: String,
     pub init_git: bool,
     pub clear_readme: bool,
+
+    url: String,
 }
 
 impl Cli {
     pub fn init() -> Result<Self, Box<dyn Error>> {
+        let templates = Self::fetch_templates()?;
+
         Ok(Self {
-            template: Self::get_template()?,
+            template: Self::get_template(&templates)?,
             new_or_init: Self::get_new_or_init()?,
             project_name: Self::get_project_name()?,
             init_git: Self::get_init_git()?,
             clear_readme: Self::get_clear_readme()?,
+
+            url: String::from("github:nulladmin1/nix-flake-templates"),
         })
+    }
+
+    fn fetch_templates() -> Result<Templates, Box<dyn Error>> {
+        println!("📥 Fetching templates...");
+
+        let args = [
+            "--extra-experimental-features",
+            "'nix-command flakes'",
+            "flake",
+            "show",
+            "--json",
+            "github:nulladmin1/nix-flake-templates",
+        ];
+        let mut command = Command::new("nix");
+        command.args(args);
+
+        match command.output() {
+            Ok(output) => {
+                let output_json = String::from_utf8(output.stdout)?;
+                let parsed_json: serde_json::Value = serde_json::from_str(&output_json)?;
+                let templates_json = parsed_json.get("templates").unwrap();
+
+                let mut templates: Templates = Vec::new();
+
+                for (key, value) in templates_json.as_object().unwrap() {
+                    let description = if key == &"default".to_owned() {
+                        "Empty/Blank".to_string()
+                    } else {
+                        value
+                            .get("description")
+                            .unwrap()
+                            .as_str()
+                            .unwrap()
+                            .strip_prefix("Nix Flake Template for ")
+                            .unwrap()
+                            .to_string()
+                    };
+                    templates.push(Template {
+                        name: key.to_string(),
+                        print_str: description,
+                    });
+                }
+                let mut duplicate_descriptions: HashSet<String> = HashSet::new();
+                templates
+                    .retain(|template| duplicate_descriptions.insert(template.print_str.clone()));
+
+                Ok(templates)
+            }
+            Err(e) => {
+                eprintln!("❌ Failed to fetch templates: {e}");
+                Err(Box::from("Failed to fetch templates"))
+            }
+        }
     }
 
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
@@ -109,10 +122,7 @@ impl Cli {
 
         println!("\n🚀 Initializing project...");
 
-        let url = format!(
-            "github:nulladmin1/nix-flake-templates#{}",
-            self.template.as_str()
-        );
+        let url = format!("{}#{}", self.url.as_str(), self.template.as_str());
 
         let new_or_init_string = self.new_or_init.to_string();
         let new_or_init = new_or_init_string.as_str();
@@ -179,14 +189,14 @@ impl Cli {
         Ok(())
     }
 
-    fn get_template() -> Result<String, Box<dyn Error>> {
+    fn get_template(templates: &Templates) -> Result<String, Box<dyn Error>> {
         println!("📦 What {GREEN}template{RESET} do you want to use? ");
 
-        (1..TEMPLATES.len() + 1).for_each(|i| {
-            let template_str = TEMPLATES[i - 1].print_str;
+        (1..templates.len() + 1).for_each(|i| {
+            let template_str = &templates[i - 1].print_str;
             println!("  {BLUE}{i}){RESET} {template_str}");
         });
-        println!("👆 Pick a number or enter the code for the template: ");
+        print!("👆 Pick a number or enter the code for the template: ");
         io::stdout().flush()?;
 
         let mut template_input = String::new();
@@ -196,7 +206,7 @@ impl Cli {
             .parse()
             .expect("Please enter a {GREEN}number{RESET} within that range");
 
-        Ok(TEMPLATES[template_input - 1].name.to_owned())
+        Ok(templates[template_input - 1].name.to_owned())
     }
 
     fn get_new_or_init() -> Result<NewOrInit, Box<dyn Error>> {
