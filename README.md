@@ -2,6 +2,8 @@
 
 Easily fetch my [Nix Flake Templates](https://github.com/nulladmin1/nix-flake-templates) using this `CLI` tool
 
+![demo](./getflake.gif)
+
 To run without installing:
 
 ```nix
